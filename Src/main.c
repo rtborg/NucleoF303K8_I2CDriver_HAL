@@ -105,11 +105,12 @@ int main(void) {
 	}
 
 }
-
+/****************************************************************************************************************/
 /**
  * @brief System Clock Configuration
  * @retval None
  */
+/****************************************************************************************************************/
 void SystemClock_Config(void) {
 	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
 	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
@@ -150,11 +151,13 @@ void SystemClock_Config(void) {
 	}
 }
 
+/****************************************************************************************************************/
 /**
  * @brief I2C1 Initialization Function
  * @param None
  * @retval None
  */
+/****************************************************************************************************************/
 static void MX_I2C1_Init(void) {
 	hi2c1.Instance = I2C1;
 	hi2c1.Init.Timing = 0x00201D2B;
@@ -181,11 +184,13 @@ static void MX_I2C1_Init(void) {
 	}
 }
 
+/****************************************************************************************************************/
 /**
  * @brief USART2 Initialization Function
  * @param None
  * @retval None
  */
+/****************************************************************************************************************/
 static void MX_USART2_UART_Init(void) {
 
 	huart2.Instance = USART2;
@@ -204,11 +209,13 @@ static void MX_USART2_UART_Init(void) {
 
 }
 
+/****************************************************************************************************************/
 /**
  * @brief USART1 Initialization Function
  * @param None
  * @retval None
  */
+/****************************************************************************************************************/
 static void MX_USART1_UART_Init(void) {
 	huart1.Instance = USART1;
 	huart1.Init.BaudRate = 9600;
@@ -230,11 +237,13 @@ static void MX_USART1_UART_Init(void) {
 	}
 }
 
+/****************************************************************************************************************/
 /**
  * @brief GPIO Initialization Function
  * @param None
  * @retval None
  */
+/****************************************************************************************************************/
 static void MX_GPIO_Init(void) {
 	GPIO_InitTypeDef GPIO_InitStruct = { 0 };
 
@@ -255,11 +264,13 @@ static void MX_GPIO_Init(void) {
 
 }
 
+/****************************************************************************************************************/
 /**
  * @brief TIM3 Initialization Function
  * @param None
  * @retval None
  */
+/****************************************************************************************************************/
 static void MX_TIM3_Init(void) {
 
 	/* USER CODE BEGIN TIM3_Init 0 */
@@ -298,6 +309,11 @@ static void MX_TIM3_Init(void) {
 
 }
 
+/****************************************************************************************************************/
+/**
+ * USART1 interrupt service routine
+ */
+/****************************************************************************************************************/
 void USART1_IRQHandler(void) {
 	if (__HAL_UART_GET_FLAG(&huart1, USART_ISR_TXE)) {
 		// Hanlde transmit interrupt
@@ -309,10 +325,22 @@ void USART1_IRQHandler(void) {
 	}
 }
 
+/****************************************************************************************************************/
+/**
+ * Timer 3 interrupt service routine
+ */
+/****************************************************************************************************************/
 void TIM3_IRQHandler(void) {
 	// @TODO: Clear interrupt flag, toggle pin to confirm timing
 }
 
+/****************************************************************************************************************/
+/**
+ * SFM4100 function for calculating EEPROM base address
+ * @param p_address A pointer which will be set to the EEPROM base address
+ * @return 1 or 0
+ */
+/****************************************************************************************************************/
 uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address) {
 	// Read read-only register 2
 	if (HAL_I2C_Master_Transmit(&hi2c1, SENSORON_ADDR, &read_only_reg2_r, 0x01,
@@ -345,6 +373,14 @@ uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address) {
 	*p_address = read_only_reg2_contents;
 }
 
+/****************************************************************************************************************/
+/**
+ * SFM4100 read register function
+ * @param reg The address of the register as defined in this file
+ * @param p_reg_value The contents of the register will be copied in this pointer
+ * @return 1 or 0
+ */
+/****************************************************************************************************************/
 uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_reg_value) {
 	// Issue write command
 	if (HAL_I2C_Master_Transmit(&hi2c1, SENSORON_ADDR, &reg, 0x01, 100)
@@ -369,6 +405,14 @@ uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_reg_value) {
 	return 1;
 }
 
+/****************************************************************************************************************/
+/**
+ * SFM4100 write register function
+ * @param reg The address of the register as defined in this file
+ * @param p_reg_value The value to be written in the register
+ * @return
+ */
+/****************************************************************************************************************/
 uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_reg_value) {
 	// A write to a register will be 2 bytes only. Need to concatenate address and reg value
 	// Total transfer length: 3 bytes
@@ -385,6 +429,7 @@ uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_reg_value) {
 		return 0;
 	}
 }
+
 
 uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number) {
 	// @TODO Implement
