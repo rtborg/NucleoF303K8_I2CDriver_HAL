@@ -34,9 +34,9 @@ uint8_t sfm4100_soft_reset();
 
 // Macros
 // @TODO: Test if macros are working
-#define TIMER3_START				(TIM3->CR1 |= TIM_CR1_CEN)
-#define TIMER3_INTERRUPT_FLAG		(TIM3->SR & TIM_SR_UIF)
-#define TIMER3_RESTART				(TIM3->CNT = 0)
+#define TIMER3_START()				(TIM3->CR1 |= TIM_CR1_CEN)
+#define TIMER3_INTERRUPT_FLAG()		(TIM3->SR & TIM_SR_UIF)
+#define TIMER3_RESTART()				(TIM3->CNT = 0)
 
 /**
  * SFM4100 user commands list
@@ -61,8 +61,10 @@ uint8_t soft_reset = 0xfe;
 #define EE_ADR_SCALE_FACTOR 0x02B6
 #define EE_ADR_FLOW_UNIT 0x02B7
 
-// Receive buffer
-uint8_t receive_buffer[32] = { 0 };
+uint8_t receive_buffer[32] = { 0 };		// Receive buffer for SFM4100 functions
+char modbus_buffer[8] = {0};			// Modbus data buffer. Commands will be no more than 8 bytes long
+volatile uint16_t m_buffer_index = 0;	// Index of modbus buffer
+
 // Message
 char *msg = "Hello!";
 uint8_t hs = 0;
@@ -314,12 +316,27 @@ void USART1_IRQHandler(void) {
 	} else if (__HAL_UART_GET_FLAG(&huart1, USART_ISR_RXNE)) {
 		// Handle receive interrupt
 		// Clear flag
-		char ch = USART1->RDR;
+		// char ch = USART1->RDR;
 		// @TODO
 		// Check if timer 3 has expired
 		// If true, check if buffer is not empty
 		// If there's something in the buffer, put it in a queue to be consumed in main loop
 		// If timer has not expired, put received char in buffer and restart timer
+
+		if (TIMER3_INTERRUPT_FLAG() == 0) {				// Check if timer has not expired, which means we are still in reception phase
+			TIMER3_RESTART();							// Restart the timer
+			modbus_buffer[m_buffer_index++] = USART1->RDR;
+
+			if (m_buffer_index == 8) {					// If 8 bytes already received, alert main and stop timer
+
+			}
+		} else {
+			// Inform main about a complete new message being received
+			// Start the timer again; it's been disabled int TIM3 ISR
+			TIMER3_START();
+			m_buffer_index = 0;							// Put first character of the message in pos. 0
+			modbus_buffer[m_buffer_index++] = USART1->RDR;
+		}
 	}
 }
 
