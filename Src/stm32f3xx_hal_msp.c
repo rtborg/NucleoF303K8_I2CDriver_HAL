@@ -149,6 +149,8 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef* hi2c)
 * This function configures the hardware resources used in this example
 * @param huart: UART handle pointer
 * @retval None
+* NOTE: The default function did not intialize usart1 with DE pin
+*
 */
 void HAL_UART_MspInit(UART_HandleTypeDef* huart)
 {
@@ -165,8 +167,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     /**USART1 GPIO Configuration    
     PA9     ------> USART1_TX
     PA10     ------> USART1_RX 
+    PA12 -----> USART1_DE		Added by me
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10;
+    GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_12; // GPIO_PIN_12 added by me
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
