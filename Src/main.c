@@ -19,24 +19,10 @@ void TIM3_Init();							// Timer 3 setup
 void USART1_IRQHandler(void);				// USART1 global interrupt hanlder
 void TIM3_IRQHandler(void);					// TIM3 interrupt handler
 
-// SFM4100 API
-uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address);
-uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_reg_value);
-uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_reg_value);
-uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number);
-uint8_t sfm4100_read_scale_factor(uint16_t *p_scale_factor);
-uint8_t sfm4100_read_flow_unit(char *flow_unit); // may be 11 bytes
-uint8_t sfm4100_soft_reset();
-
 // Sensiron SFM4100 address is actually 0x01 shifted to the left by 1 bit
 // The datasheet wrongly shows bit 7 of the address field set
-#define SENSOR_ADDR		(0x01 << 1)
-
-// Macros
-// @TODO: Test if macros are working
-#define TIMER3_START()				(TIM3->CR1 |= TIM_CR1_CEN)
-#define TIMER3_INTERRUPT_FLAG()		(TIM3->SR & TIM_SR_UIF)
-#define TIMER3_RESTART()				(TIM3->CNT = 0)
+#define SENSOR_ADDR		(uint16_t)(0x01 << 1)
+#define POLYNOMIAL 0x131 //P(x)=x^8+x^5+x^4+1 = 100110001
 
 /**
  * SFM4100 user commands list
@@ -55,22 +41,51 @@ uint8_t eeprom_w = 0xfa;
 uint8_t eeprom_r = 0xfa;
 uint8_t soft_reset = 0xfe;
 
+// Measurement types
+typedef enum {
+	FLOW					= 0xf1,
+	TEMP 					= 0xf3,
+	VDD						= 0xf5,
+}SFM4100_Measurement_Type;
+
 // SF04 eeprom map
-#define EE_ADR_SN_CHIP 0x02E4		//
-#define EE_ADR_SN_PRODUCT 0x02F8	//
+#define EE_ADR_SN_CHIP 0x02E8		// 10-byte array
+#define EE_ADR_SN_PRODUCT 0x02F8	// 32-bit uint
 #define EE_ADR_SCALE_FACTOR 0x02B6
 #define EE_ADR_FLOW_UNIT 0x02B7
 
-uint8_t receive_buffer[32] = { 0 };		// Receive buffer for SFM4100 functions
+// SFM4100 API
+uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address);
+uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_register_value);
+uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_register_value);
+uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number);
+uint8_t sfm4100_read_scale_factor(uint16_t *p_scale_factor);
+uint8_t sfm4100_read_flow_unit(char *flow_unit); // may be 11 bytes
+uint8_t sfm4100_soft_reset();
+uint8_t sfm4100_read_eeprom(uint16_t eeprom_start_address, uint8_t size, uint8_t eeprom_data[]);
+uint8_t sfm4100_check_crc(uint8_t data[], uint8_t nbrOfBytes, uint8_t checksum);
+uint8_t sfm4100_measure(SFM4100_Measurement_Type measurement_type, uint16_t *p_address);
+
+// SFM4100 variables
+uint8_t sfm4100_data_buffer[32] = { 0 };		// Receive buffer for SFM4100 functions
+uint8_t sfm4100_error = 0;
+uint16_t sfm4100_register_value = 0;
+uint32_t sfm4100_serial_number = 0;
+
+// Timer 3 Macros
+// @TODO: Test if macros are working
+#define TIMER3_START()				(TIM3->CR1 |= TIM_CR1_CEN)
+#define TIMER3_INTERRUPT_FLAG()		(TIM3->SR & TIM_SR_UIF)
+#define TIMER3_RESTART()				(TIM3->CNT = 0)
+
+// Modbus variables
 char modbus_buffer[8] = {0};			// Modbus data buffer. Commands will be no more than 8 bytes long
 volatile uint16_t m_buffer_index = 0;	// Index of modbus buffer
 
 // Message
-char *msg = "Hello!";
+char *msg = "Hello World!\n\r";
 uint8_t hs = 0;
-
-// Temp value
-uint16_t reg_value = 0;
+char uart_buffer[64] = {0};
 
 int main(void) {
 
@@ -89,31 +104,29 @@ int main(void) {
 	// Get flow unit
 
 
-	sfm4100_soft_reset();										// Issue soft reset
-	sfm4100_read_register(adv_user_reg_r, &reg_value); 			// Change flow resolution to 16 bits
-	reg_value |= 0xe00;
-	sfm4100_write_register(adv_user_reg_w, &reg_value);
+	sfm4100_soft_reset();														// Issue soft reset
+	HAL_Delay(500);																// Start-up delay
+	sfm4100_read_register(adv_user_reg_r, &sfm4100_register_value); 			// Get Adv User Register
+	sfm4100_register_value |= 0xe00;											// Change flow resolution to 16 bits
+	sfm4100_write_register(adv_user_reg_w, &sfm4100_register_value);			// Write new value to Adv User Register
+	uint8_t err = sfm4100_read_serial_number(&sfm4100_serial_number);			// Get device serial number
 
 	while (1) {
+		sfm4100_error = 0;														// Clear error
+		sfm4100_register_value = 0;												// Clear temporary register value
 		HAL_Delay(250);
 		HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 
-		// Read all registers
-		//sfm4100_read_register(user_reg_r, &reg_value);
-		//sfm4100_read_register(adv_user_reg_r, &reg_value);
-		//sfm4100_read_register(read_only_reg1_r, &reg_value);
-		//sfm4100_read_register(read_only_reg2_r, &reg_value);
-
-		// Trigger flow measurement
-		//sfm4100_read_register(trigger_flow_measurement, &reg_value);
-		//sfm4100_read_register(trigger_temp_measurement, &reg_value);
-
-		// @TODO Read serial number
+		sfm4100_error = sfm4100_measure(FLOW, &sfm4100_register_value);			// Trigger flow measurement
+		if (sfm4100_error == 0) {
+			sprintf(uart_buffer, "Flow: %d sccm\n\r", sfm4100_register_value);
+			HAL_UART_Transmit(&huart2, uart_buffer, strlen(uart_buffer), 1000);
+		}
 
 		// @TODO USART1 IRQ routine - need interrupt on receive
 		/* Put every received char in a buffer and start the timer.
 		 * If the timer expires, a frame is received. Raise a flag to be polled in main */
-		// hs = HAL_UART_Transmit(&huart1, msg, sizeof(msg), 100);
+		// hs = HAL_UART_Transmit(&huart1, msg, 14, 1000);
 	}
 
 }
@@ -240,7 +253,7 @@ static void MX_USART1_UART_Init(void) {
 	huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
 	huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
 
-	if (HAL_RS485Ex_Init(&huart1, UART_DE_POLARITY_HIGH, 0, 0) != HAL_OK) {
+	if (HAL_RS485Ex_Init(&huart1, UART_DE_POLARITY_HIGH, 16, 16) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -311,33 +324,35 @@ void TIM3_Init() {
  */
 /****************************************************************************************************************/
 void USART1_IRQHandler(void) {
-	if (__HAL_UART_GET_FLAG(&huart1, USART_ISR_TXE)) {
-		// Hanlde transmit interrupt
-	} else if (__HAL_UART_GET_FLAG(&huart1, USART_ISR_RXNE)) {
-		// Handle receive interrupt
-		// Clear flag
-		// char ch = USART1->RDR;
-		// @TODO
-		// Check if timer 3 has expired
-		// If true, check if buffer is not empty
-		// If there's something in the buffer, put it in a queue to be consumed in main loop
-		// If timer has not expired, put received char in buffer and restart timer
-
-		if (TIMER3_INTERRUPT_FLAG() == 0) {				// Check if timer has not expired, which means we are still in reception phase
-			TIMER3_RESTART();							// Restart the timer
-			modbus_buffer[m_buffer_index++] = USART1->RDR;
-
-			if (m_buffer_index == 8) {					// If 8 bytes already received, alert main and stop timer
-
-			}
-		} else {
-			// Inform main about a complete new message being received
-			// Start the timer again; it's been disabled int TIM3 ISR
-			TIMER3_START();
-			m_buffer_index = 0;							// Put first character of the message in pos. 0
-			modbus_buffer[m_buffer_index++] = USART1->RDR;
-		}
-	}
+//	if (__HAL_UART_GET_FLAG(&huart1, USART_ISR_TXE)) {
+//		// Hanlde transmit interrupt
+//	} else if (__HAL_UART_GET_FLAG(&huart1, USART_ISR_RXNE)) {
+//		// Handle receive interrupt
+//		// Clear flag
+//		// char ch = USART1->RDR;
+//		// @TODO
+//		// Check if timer 3 has expired
+//		// If true, check if buffer is not empty
+//		// If there's something in the buffer, put it in a queue to be consumed in main loop
+//		// If timer has not expired, put received char in buffer and restart timer
+//
+//		if (TIMER3_INTERRUPT_FLAG() == 0) {				// Check if timer has not expired, which means we are still in reception phase
+//			TIMER3_RESTART();							// Restart the timer
+//			modbus_buffer[m_buffer_index++] = USART1->RDR;
+//
+//			if (m_buffer_index == 8) {					// If 8 bytes already received, alert main and stop timer
+//
+//			}
+//		} else {
+//			// Inform main about a complete new message being received
+//			// Start the timer again; it's been disabled int TIM3 ISR
+//			TIMER3_START();
+//			m_buffer_index = 0;							// Put first character of the message in pos. 0
+//			modbus_buffer[m_buffer_index++] = USART1->RDR;
+//		}
+//	}
+	// Clear receive interrupt flag
+	char ch = USART1->RDR;
 }
 
 /****************************************************************************************************************/
@@ -355,24 +370,17 @@ void TIM3_IRQHandler(void) {
 /**
  * SFM4100 function for calculating EEPROM base address
  * @param p_address A pointer which will be set to the EEPROM base address
- * @return 1 or 0
+ * @return 0 on success
  */
 /****************************************************************************************************************/
 uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address) {
-	// Read read-only register 2
-	if (HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &read_only_reg2_r, 0x01,
-			100) != HAL_OK) {
-		Error_Handler();
-		return 0;
-	}
+	uint8_t error = 0;
+	error |= sfm4100_read_register(read_only_reg2_r, p_address);
 
-	if (HAL_I2C_Master_Receive(&hi2c1, SENSOR_ADDR, receive_buffer, 0x03, 100)
-			!= HAL_OK) {
-		Error_Handler();
-		return 0;
-	}
+	*p_address &= 0x07;
+	*p_address *= 0x300;
 
-	// Copy data from receive buffer. Note that MSB is at position [0]
+	return error;
 	/**
 	 * The EEPROM address is composed of an EEPROM base address and an address offset.
 	 * To determine the base EEPROM address for general sensor information,
@@ -381,120 +389,194 @@ uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address) {
 	 * Then the Wordadr Offset of following table must be added to that address.
 	 * See Application Note for I2C Flow and Differential Pressure Sensors
 	 */
-	uint16_t read_only_reg2_contents = 0;
-	read_only_reg2_contents |= (uint16_t) (receive_buffer[0] << 8);
-	read_only_reg2_contents |= (uint16_t) (receive_buffer[1]);
-	read_only_reg2_contents &= 0x07; 	// Mask bits [2:0]
-	read_only_reg2_contents *= 0x300;
-
-	*p_address = read_only_reg2_contents;
 }
 
 /****************************************************************************************************************/
 /**
  * SFM4100 read register function
  * @param reg The address of the register as defined in this file
- * @param p_reg_value The contents of the register will be copied in this pointer
- * @return 1 or 0
+ * @param p_register_value The contents of the register will be copied in this pointer
+ * @return 0 on success
  */
 /****************************************************************************************************************/
-uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_reg_value) {
-	// Issue write command
-	if (HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &reg, 0x01, 100)
-			!= HAL_OK) {
-		Error_Handler();
-		return 0;
-	}
+uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_register_value) {
+	uint8_t error = 0;
 
-	// Read contents of register
-	if (HAL_I2C_Master_Receive(&hi2c1, SENSOR_ADDR, receive_buffer, 0x03, 100)
-			!= HAL_OK) {
-		Error_Handler();
-		return 0;
-	}
+	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &reg, 0x01, 1000);				// Issue write command
+	error |= HAL_I2C_Master_Receive(&hi2c1, SENSOR_ADDR, sfm4100_data_buffer, 0x03, 1000);	// Read contents of register
+	error |= sfm4100_check_crc(sfm4100_data_buffer, 2, sfm4100_data_buffer[2]); 					// Check CRC
 
 	uint16_t reg_contents = 0;
-	reg_contents |= (uint16_t) (receive_buffer[0] << 8);
-	reg_contents |= (uint16_t) (receive_buffer[1]);
+	reg_contents |= (uint16_t) (sfm4100_data_buffer[0] << 8);
+	reg_contents |= (uint16_t) (sfm4100_data_buffer[1]);
+	*p_register_value = reg_contents;
 
-	*p_reg_value = reg_contents;
-
-	return 1;
+	return error;
 }
 
 /****************************************************************************************************************/
 /**
  * SFM4100 write register function
  * @param reg The address of the register as defined in this file
- * @param p_reg_value The value to be written in the register
- * @return 1 or 0
+ * @param p_register_value The value to be written in the register
+ * @return 0 on success
  */
 /****************************************************************************************************************/
-uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_reg_value) {
+uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_register_value) {
 	// A write to a register will be 2 bytes only. Need to concatenate address and reg value
 	// Total transfer length: 3 bytes
-	uint16_t reg_value = *p_reg_value;
+	uint8_t error = 0;
+	uint16_t register_value = *p_register_value;
 	uint8_t data[3] = { 0 };
 	data[0] = reg;
-	data[1] = (uint8_t) (reg_value >> 8);
-	data[2] = (uint8_t) (reg_value & 0xff);
+	data[1] = (uint8_t) (register_value >> 8);
+	data[2] = (uint8_t) (register_value & 0xff);
 
-	// Issue write command
-	if (HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, data, 0x04, 100)
-			!= HAL_OK) {
-		Error_Handler();
-		return 0;
-	}
+	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, data, 0x03, 1000);
+	return error;
 }
 
 /****************************************************************************************************************/
 /**
  * SFM4100 Read serial number of the device
  * @param p_serial_number The serial number will be written into this pointer
- * @return 1 or 0
+ * @return 0 on success
  */
 /****************************************************************************************************************/
 uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number) {
-	// @TODO Implement
+	uint8_t error = 0;
+	uint16_t eeprom_base_address = 0;
+	uint16_t eeprom_address = 0;
+	uint32_t serial_number = 0;
+
+	error = sfm4100_get_eeprom_base_address(&eeprom_base_address);					// Get eeprom base address
+	eeprom_address = eeprom_base_address + EE_ADR_SN_PRODUCT;						// Get serial number field address in eeprom
+	error |= sfm4100_read_eeprom(eeprom_address, 6, sfm4100_data_buffer);			// Read serial number: 2 bytes - CRC - 2 bytes - CRC, total of 6 bytes
+	error |= sfm4100_check_crc(sfm4100_data_buffer, 2, sfm4100_data_buffer[2]);		// Check first CRC
+	uint8_t *p = &sfm4100_data_buffer[3];											// The second 16-bit register starts at sfm4100_data_buffer[3]
+	error |= sfm4100_check_crc(p, 2, p[2]);											// Check second CRC
+
+	serial_number |= (sfm4100_data_buffer[0] << 24);								// Copy the 4 received bytes into the function argument
+	serial_number |= (sfm4100_data_buffer[1] << 16);
+	serial_number |= (sfm4100_data_buffer[3] << 8);
+	serial_number |= (sfm4100_data_buffer[4] << 0);
+	*p_serial_number = serial_number;
+
+	return error;
 }
 
 /****************************************************************************************************************/
 /**
  * SFM4100 Read scale factor
  * @param p_scale_factor The scale factor will be written into this pointer
- * @return 1 or 0
+ * @return 0 on success
  */
 /****************************************************************************************************************/
 uint8_t sfm4100_read_scale_factor(uint16_t *p_scale_factor) {
-	// @TODO Implement
+	// @TODO Implement - need EEPROM map
 }
 
 /****************************************************************************************************************/
 /**
  * SFM4100 Read flow unit
  * @param flow_unit The flow unit will be written into this pointer (20 bytes)
- * @return 1 or 0
+ * @return 0 on success
  */
 /****************************************************************************************************************/
 uint8_t sfm4100_read_flow_unit(char *flow_unit) {
-	// @TODO Implement
+	// @TODO Implement - need EEPROM map
 }
 
 /****************************************************************************************************************/
 /**
  * SFM4100 Soft reset
- * @return 1 or 0
+ * @return 0 on success
  */
 /****************************************************************************************************************/
 uint8_t sfm4100_soft_reset() {
 	// Issue write command
 	// @TODO - check if it's working
-	if (HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &soft_reset, 0x01, 100)
-			!= HAL_OK) {
-		Error_Handler();
-		return 0;
+	uint8_t error = 0;
+	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &soft_reset, 0x01, 1000);
+	return error;
+}
+
+/****************************************************************************************************************/
+/**
+ * SFM4100 read EEPROM data
+ * @param eeprom_start_address
+ * @param size - the number of bytes to read
+ * @param eeprom_data - pointer to an array of bytes into which the EEPROM data will be copied
+ * @return 0 on success
+ */
+/****************************************************************************************************************/
+uint8_t sfm4100_read_eeprom(uint16_t eeprom_start_address, uint8_t size, uint8_t eeprom_data[]) {
+	uint8_t error = 0;
+	uint8_t eeprom_address[3] = {0};														// Create array from read eerpom command and the eeprom address
+	eeprom_start_address = ((eeprom_start_address << 4) & 0xfff0);							// Left-shift the eeprom address by 4 bits
+	eeprom_address[0] = eeprom_r;															// Command 0xFA
+	eeprom_address[1] = (uint8_t) (eeprom_start_address >> 8) & 0xff;						// MSB of the eeprom address
+	eeprom_address[2] = (uint8_t) (eeprom_start_address & 0xff);							// LSB of the eeprom address
+
+	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, eeprom_address, 0x03, 1000);		// Send command
+	error |= HAL_I2C_Master_Receive(&hi2c1, SENSOR_ADDR, eeprom_data, size, 1000);			// Get eeprom data and copy it into the user-supplied array
+
+	return error;
+}
+
+/****************************************************************************************************************/
+/**
+ * Calculate CRC of received data. Function adapred from Sensirion Mass Fwol Meters CRC Calculation application note
+ * @param data - checksum is built based on this data
+ * @param nbrOfBytes = checksum is built for n bytes of data
+ * @param checksum - expected checksum
+ * @return 0 on success
+ */
+/****************************************************************************************************************/
+uint8_t sfm4100_check_crc(uint8_t data[], uint8_t nbrOfBytes, uint8_t checksum) {
+	uint8_t crc = 0;
+	uint8_t byteCtr;
+	//calculates 8-Bit checksum with given polynomial
+	for (byteCtr = 0; byteCtr < nbrOfBytes; ++byteCtr) {
+		crc ^= (data[byteCtr]);
+		for (uint8_t bit = 8; bit > 0; --bit) {
+			if (crc & 0x80) crc = (crc << 1) ^ POLYNOMIAL;
+			else crc = (crc << 1);
+		}
 	}
-	return 1;
+	if (crc != checksum) return 1;
+	else return 0;
+}
+
+/****************************************************************************************************************/
+/**
+ * Measure flow, temperature or voltage (voltage measurement is not implemented on SFM4100)
+ * @param measurement_type FLOW, TEMP or VDD
+ * @param p_address Pointer to the 16-bit variable to which the data will be written
+ * @return
+ */
+/****************************************************************************************************************/
+uint8_t sfm4100_measure(SFM4100_Measurement_Type measurement_type,
+		uint16_t *p_address) {
+	uint8_t error = 0;
+	uint16_t data = 0;
+
+	switch (measurement_type) {
+	case FLOW:
+		error |= sfm4100_read_register(trigger_flow_measurement, &data);
+		break;
+	case TEMP:
+		error |= sfm4100_read_register(trigger_temp_measurement, &data);
+		break;
+	case VDD:
+		error |= sfm4100_read_register(trigger_temp_measurement, &data);
+		break;
+	default:
+		break;
+	}
+
+	*p_address = data;
+	return error;
 }
 
 /**
