@@ -49,7 +49,7 @@ typedef enum {
 }SFM4100_Measurement_Type;
 
 // SF04 eeprom map
-#define EE_ADR_SN_CHIP 0x02E8		// 10-byte array
+#define EE_ADR_PART_NAME 0x02E8		// 10-byte array
 #define EE_ADR_SN_PRODUCT 0x02F8	// 32-bit uint
 #define EE_ADR_SCALE_FACTOR 0x02B6
 #define EE_ADR_FLOW_UNIT 0x02B7
@@ -98,10 +98,10 @@ int main(void) {
 	MX_USART2_UART_Init();
 	MX_USART1_UART_Init();
 
-	// Get chip serial number
-	// Get product serial number
-	// Get scale factor
-	// Get flow unit
+	// Get chip serial number - done in concept
+	// Get product serial number - done in concept
+
+	TIMER3_START();																// Start Timer 3
 
 
 	sfm4100_soft_reset();														// Issue soft reset
@@ -110,6 +110,8 @@ int main(void) {
 	sfm4100_register_value |= 0xe00;											// Change flow resolution to 16 bits
 	sfm4100_write_register(adv_user_reg_w, &sfm4100_register_value);			// Write new value to Adv User Register
 	uint8_t err = sfm4100_read_serial_number(&sfm4100_serial_number);			// Get device serial number
+	sprintf(uart_buffer, "Sensor serial no: %d\n\r", sfm4100_serial_number);	// Print serial number to the console
+	HAL_UART_Transmit(&huart2, uart_buffer, strlen(uart_buffer), 1000);
 
 	while (1) {
 		sfm4100_error = 0;														// Clear error
@@ -310,14 +312,9 @@ void TIM3_Init() {
 	TIM3->PSC = 0x09;						// Prescaler
 	TIM3->DMAR = 0;							// It's not 0x00 at start for some reason
 	DBGMCU->APB1FZ |= DBGMCU_APB1_FZ_DBG_TIM3_STOP;		// Timer 3 clock stops in Debug mode
-
-	HAL_NVIC_SetPriority(TIM3_IRQn, 5, 5);	// Set interrupt priority
-	TIM3->DIER |= TIM_DIER_UIE;				// Update interrupt enabled
-	HAL_NVIC_EnableIRQ(TIM3_IRQn);
-
 	TIM3->SR = 0;							// Clear status register
+	TIM3->CR1 |= TIM_CR1_CEN;				// Enable timer
 }
-
 /****************************************************************************************************************/
 /**
  * USART1 interrupt service routine
@@ -362,7 +359,7 @@ void USART1_IRQHandler(void) {
 /****************************************************************************************************************/
 void TIM3_IRQHandler(void) {
 	TIM3->SR &= ~(TIM_SR_UIF);		// Clear inerrupt flag
-	TIM3->SR = TIM3->SR;			// Sometimes interrupts can be triggered twice. See http://www.keil.com/support/docs/3928.htm
+	//TIM3->SR = TIM3->SR;			// Sometimes interrupts can be triggered twice. See http://www.keil.com/support/docs/3928.htm
 	TIM3->CR1 &= ~(TIM_CR1_CEN);	// Disable timer
 }
 
