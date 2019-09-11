@@ -476,7 +476,7 @@ typedef struct
   */
 
 /** @defgroup UART_Interrupt_definition   UART Interrupts Definition
-  *        Elements values convention: 000ZZZZZ0XXYYYYYb
+  *        Elements values convention: 000Z ZZZZ 0XXY YYYY b
   *           - YYYYY  : Interrupt source position in the XX register (5bits)
   *           - XX  : Interrupt source register (2bits)
   *                 - 01: CR1 register
@@ -498,6 +498,7 @@ typedef struct
 #define UART_IT_ORE                         (0x0300U)                  /*!< UART overrun error interruption                */ 
 #define UART_IT_NE                          (0x0200U)                  /*!< UART noise error interruption                  */ 
 #define UART_IT_FE                          (0x0100U)                  /*!< UART frame error interruption                  */ 
+#define UART_IT_RTO							(0x0D3AU)					// Added in RTOEN flag enable mask; Cube does not implement it
 /**
   * @}
   */
