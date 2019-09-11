@@ -42,9 +42,12 @@ int main(void) {
 	MX_USART2_UART_Init();
 	MX_USART1_UART_Init();
 
-	sfm4100_soft_reset();									// Issue soft reset
-	uint8_t err = sfm4100_read_serial_number(&sfm4100_serial_number);// Get device serial number
-	sprintf(uart_buffer, "Sensor serial no: %d\n\r", sfm4100_serial_number);// Print serial number to the console
+	// @TODO Use a command queue
+	// @TODO CRC check
+
+	sfm4100_soft_reset();																// Issue soft reset
+	uint8_t err = sfm4100_read_serial_number(&sfm4100_serial_number);					// Get device serial number
+	sprintf(uart_buffer, "Sensor serial no: %d\n\r", sfm4100_serial_number);			// Print serial number to the console
 	HAL_UART_Transmit(&huart1, uart_buffer, strlen(uart_buffer), 1000);
 
 	while (1) {
