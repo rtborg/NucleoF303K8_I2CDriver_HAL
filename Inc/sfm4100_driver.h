@@ -33,8 +33,6 @@ uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address);
 uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_register_value);
 uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_register_value);
 uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number);
-uint8_t sfm4100_read_scale_factor(uint16_t *p_scale_factor);
-uint8_t sfm4100_read_flow_unit(char *flow_unit); // may be 11 bytes
 uint8_t sfm4100_soft_reset();
 uint8_t sfm4100_read_eeprom(uint16_t eeprom_start_address, uint8_t size, uint8_t eeprom_data[]);
 uint8_t sfm4100_check_crc(uint8_t data[], uint8_t nbrOfBytes, uint8_t checksum);

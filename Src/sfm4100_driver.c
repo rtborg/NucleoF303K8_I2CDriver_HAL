@@ -131,36 +131,12 @@ uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number) {
 
 /****************************************************************************************************************/
 /**
- * SFM4100 Read scale factor
- * @param p_scale_factor The scale factor will be written into this pointer
- * @return 0 on success
- */
-/****************************************************************************************************************/
-uint8_t sfm4100_read_scale_factor(uint16_t *p_scale_factor) {
-	// @TODO Implement - need EEPROM map
-}
-
-/****************************************************************************************************************/
-/**
- * SFM4100 Read flow unit
- * @param flow_unit The flow unit will be written into this pointer (20 bytes)
- * @return 0 on success
- */
-/****************************************************************************************************************/
-uint8_t sfm4100_read_flow_unit(char *flow_unit) {
-	// @TODO Implement - need EEPROM map
-}
-
-/****************************************************************************************************************/
-/**
  * SFM4100 Soft reset
  * The function configures the sensor for 16-bit flow measurement resolution
  * @return 0 on success
  */
 /****************************************************************************************************************/
 uint8_t sfm4100_soft_reset() {
-	// Issue write command
-	// @TODO - check if it's working
 	uint8_t error = 0;
 	uint16_t sfm4100_register_value = 0;
 	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &soft_reset, 0x01, 1000);
