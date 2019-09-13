@@ -16,7 +16,9 @@ static void MX_USART1_UART_Init(void);
 static void MX_TIM3_Init(void);
 
 // Various user functions
-void USART1_IRQHandler(void);				// USART1 global interrupt hanlder
+void USART1_IRQHandler(void);					// USART1 global interrupt hanlder
+void USART1_putchar(uint8_t ch);
+void USART1_putstring(uint8_t *s);
 
 // SFM4100 variables
 uint8_t sfm4100_error = 0;
@@ -28,9 +30,16 @@ volatile char modbus_buffer[256] = { 0 };		// Modbus data buffer. Commands will 
 volatile uint8_t m_buffer_index = 0;			// Index of modbus buffer
 volatile uint8_t command_flag = 0;				// Flag raised if a 6-byte command is received by the USART
 
-// Message
-char *msg = "Hello World!\n\r";
-char uart_buffer[64] = {0};
+// UART1 buffers variables
+#define UART1_TX_BUFFER_SIZE 64
+
+uint8_t uart_buffer[64] = {0};
+volatile uint8_t uart1TxHead = 0;
+volatile uint8_t uart1TxTail = 0;
+volatile uint8_t uart1TxBuffer[UART1_TX_BUFFER_SIZE];
+volatile uint8_t uart1TxBufferRemaining;
+
+
 
 int main(void) {
 
@@ -48,13 +57,12 @@ int main(void) {
 	sfm4100_soft_reset();																// Issue soft reset
 	uint8_t err = sfm4100_read_serial_number(&sfm4100_serial_number);					// Get device serial number
 	sprintf(uart_buffer, "Sensor serial no: %d\n\r", sfm4100_serial_number);			// Print serial number to the console
-	HAL_UART_Transmit(&huart1, uart_buffer, strlen(uart_buffer), 1000);
+	USART1_putstring(uart_buffer);														// Print serial no.
 
 	while (1) {
 
 		HAL_Delay(250);
 		HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-
 
 		/*
 		 * Check if a command has been received
@@ -65,8 +73,8 @@ int main(void) {
 				sfm4100_register_value = 0;												// Clear temporary register value
 				sfm4100_error = sfm4100_measure(FLOW, &sfm4100_register_value);			// Trigger flow measurement
 				sprintf(uart_buffer, "GAS FLOW: %d sccm\n\r", sfm4100_register_value);	// Copy returned flow measurement into buffer
-				HAL_UART_Transmit(&huart1, uart_buffer, strlen(uart_buffer), 1000);		// Send buffer via uart1 (modbus)
-				command_flag = 0;
+				USART1_putstring(uart_buffer);											// Print measurement
+				command_flag = 0;														// Set command flag to zero
 			}
 
 
@@ -205,6 +213,10 @@ static void MX_USART1_UART_Init(void) {
 	huart1.Instance->CR2 |= USART_CR2_RTOEN;						// Enable receiver timeout for Modbus
 	huart1.Instance->RTOR |= 0x50;									// Timeout: 40 bits. 1 bit @ 9600bps = 1/9600 = 104.17us. 40 bits = 4.17ms, approx. 3.5 chars * 11 bits each
 
+	uart1TxHead = 0;												// Initialize UART buffer variables
+	uart1TxTail = 0;
+	uart1TxBufferRemaining = sizeof(uart1TxBuffer);
+
 	// Set interrupt priority & enable interrupts
 	HAL_NVIC_SetPriority(USART1_IRQn, 5, 5);						// Set interrupt priority
 	__HAL_UART_ENABLE_IT(&huart1, UART_IT_RTO);						// Enable Receive Timeout interrupt
@@ -265,6 +277,23 @@ void USART1_IRQHandler(void) {
 		__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_ORE);
 	}
 
+	/*
+	 * Handle transmit interrupt
+	 * */
+	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TXE)) {					// Check TXE flag
+		if(sizeof(uart1TxBuffer) > uart1TxBufferRemaining) {			// If the number of free spaces in the buffer is less than the size of the buffer that means there's still characters to be sent
+			USART1->TDR = uart1TxBuffer[uart1TxTail++];					// Place char in the TX buffer. This also clears the interrupt flag
+			if(sizeof(uart1TxBuffer) <= uart1TxTail)					// Wrap around tail if needed
+			{
+				uart1TxTail = 0;
+			}
+			uart1TxBufferRemaining++;			 						// Increase number of remaining characters
+		} else {														// If remaining chars == buffer size, there's nothing to transmit
+			USART1->CR1 &= ~USART_CR1_TXEIE;							// Disable TXE interrupt
+			__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_TXE);				// Clear flag
+		}
+	}
+
 	/* The Receive Timeout interrupt happens when an idle tie of more than 40 bits (3.5 modbus 11 bit chars)
 	 * is detected. */
 	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_RTOF)) {
@@ -278,6 +307,41 @@ void USART1_IRQHandler(void) {
 
 	}
 }
+
+/**
+ * USART1 interrupt-driven putchar function
+ * @param ch
+ */
+void USART1_putchar(uint8_t ch) {
+	while (0 == uart1TxBufferRemaining) continue;						// Wait until there's a free space in the transmit buffer
+
+	if (0 == (USART1->CR1 & USART_CR1_TXEIE)) {							// If TXE interrupt is disabled, directly put char in USART TDR
+		USART1->TDR = ch;
+	} else {															// If TXE interrupt is enabled, there's transmission going on
+		USART1->CR1 &= ~USART_CR1_TXEIE;								// Disable TXE interrupt temporarily
+		uart1TxBuffer[uart1TxHead++] = ch;								// Place data in buffer
+		if(sizeof(uart1TxBuffer) <= uart1TxHead)						// Wrap around buffer head
+		{
+			uart1TxHead = 0;
+		}
+		uart1TxBufferRemaining--;										// Decrease number of free spaces in buffer
+	}
+
+	USART1->CR1 |= USART_CR1_TXEIE;										// Enable TXE interrupt
+}
+
+/**
+ * USART1 interrupt-driven putstring function
+ * @param s
+ */
+void USART1_putstring(uint8_t *s) {
+	uint ar_size = strlen(s);
+
+	for (int i = 0; i < ar_size; i++) {
+		USART1_putchar(s[i]);
+	}
+}
+
 
 /**
  * @brief  Period elapsed callback in non blocking mode
