@@ -25,14 +25,12 @@ uint8_t sfm4100_error = 0;
 uint16_t sfm4100_register_value = 0;
 uint32_t sfm4100_serial_number = 0;
 
-// Modbus data buffer. When receiving, the UART1 IRQ is filling in the buffer
+
 volatile uint8_t command_flag = 0;				// Flag raised if a 6-byte command is received by the USART
-
-
 uint8_t uart_buffer[64] = {0};					// UART1 transmit buffer
 
 /*
- * UART1 Inettupt based-transmit buffer
+ * UART1 Inettupt based-transmit buffer. Not to be used in main
  * */
 #define UART1_TX_BUFFER_SIZE 64
 volatile uint8_t uart1TxHead = 0;
@@ -41,7 +39,7 @@ volatile uint8_t uart1TxBuffer[UART1_TX_BUFFER_SIZE];
 volatile uint8_t uart1TxBufferRemaining;
 
 /*
- * Modbus buffer - 8 bytes, populated by USART1 IRQ
+ * Modbus buffer - 8 bytes, populated by USART1 IRQ. Not to be used by main
  * */
 #define MODBUS_COMMAND_LENGTH	8
 volatile uint8_t modbus_buffer_head = 0;
@@ -49,7 +47,27 @@ volatile uint8_t modbus_buffer_tail = 0;
 volatile uint8_t modbus_rx_buffer[MODBUS_COMMAND_LENGTH];
 volatile uint modbus_buffer_count = 0;
 
+/*
+ * Modbus command structure definition and buffer
+ * */
+typedef struct ModbusCommand {										// The structure of the 8-byte modbus command accepted by the module
+	uint8_t		address;
+	uint8_t		function_code;
+	uint8_t		data[4];
+	uint8_t		crc[2];
+}ModbusCommand;
 
+#define COMMAND_BUFFER_SIZE	8										// Maximum modbus buffer size
+volatile ModbusCommand commands[COMMAND_BUFFER_SIZE];				// Declaration of modbus command buffer
+volatile uint8_t mc_head = 0;
+volatile uint8_t mc_tail = 0;
+volatile uint8_t mc_count = 0;
+
+uint8_t modbus_device_address = 0x01;								// Device address
+const uint8_t modbus_function_code = 0x04;							// Function code
+
+uint8_t modbus_command_available(void);								// Check if there's a command in the buffer
+ModbusCommand get_modbus_command(ModbusCommand *commands_array);	// Fetch a modbus command from the buffer
 
 int main(void) {
 
@@ -77,17 +95,14 @@ int main(void) {
 		/*
 		 * Check if a command has been received
 		 * */
-		if (command_flag) {
-			if (modbus_rx_buffer[0] == 0x01 && modbus_rx_buffer[1] == 0x04) {			// Check if address and function code are correct
-				sfm4100_error = 0;														// Clear error
-				sfm4100_register_value = 0;												// Clear temporary register value
-				sfm4100_error = sfm4100_measure(FLOW, &sfm4100_register_value);			// Trigger flow measurement
-				sprintf(uart_buffer, "GAS FLOW: %d sccm\n\r", sfm4100_register_value);	// Copy returned flow measurement into buffer
-				USART1_putstring(uart_buffer);											// Print measurement
-				command_flag = 0;														// Set command flag to zero
-			}
 
-
+		if (modbus_command_available()) {
+			ModbusCommand mc = get_modbus_command(commands);
+			sfm4100_error = 0;														// Clear error
+			sfm4100_register_value = 0;												// Clear temporary register value
+			sfm4100_error = sfm4100_measure(FLOW, &sfm4100_register_value);			// Trigger flow measurement
+			sprintf(uart_buffer, "GAS FLOW: %d sccm\n\r", sfm4100_register_value);	// Copy returned flow measurement into buffer
+			USART1_putstring(uart_buffer);											// Print measurement
 		}
 
 	}
@@ -301,9 +316,31 @@ void USART1_IRQHandler(void) {
 		__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_RTOF);					// Clear receive timeout interrupt flag
 
 		if (modbus_buffer_head == 0 && modbus_buffer_count == 8) {		// Check modbus command buffer. If head == 0 and count == 8, an 8-byte command has been received and head has wrapped around
-			command_flag = 1;											// Set command flag
 			modbus_buffer_count = 0;									// Zero modbus command buffer count
-		} else {														// If counter is not 8 and head is not wrapped around, clear the buffer
+
+			if (modbus_rx_buffer[0] == modbus_device_address) {			// Check if modbuss address matches
+				if (modbus_rx_buffer[1] == modbus_function_code) {		// Check if function code matches
+
+					command_flag = 1;									// Set command flag
+
+					commands[mc_head].address = modbus_rx_buffer[0];	// Copy received data into modbus command buffer
+					commands[mc_head].function_code = modbus_rx_buffer[1];
+					commands[mc_head].data[0] = modbus_rx_buffer[2];
+					commands[mc_head].data[1] = modbus_rx_buffer[3];
+					commands[mc_head].data[2] = modbus_rx_buffer[4];
+					commands[mc_head].data[3] = modbus_rx_buffer[5];
+					commands[mc_head].crc[0] = modbus_rx_buffer[6];
+					commands[mc_head].crc[1] = modbus_rx_buffer[7];
+
+					mc_head++;											// Increase and wrap-around buffer head and count variables
+					if (mc_head == COMMAND_BUFFER_SIZE) mc_head = 0;
+					mc_count++;
+					if (mc_count == COMMAND_BUFFER_SIZE) mc_count = 0;
+				} else {
+					// @TODO: send exception for wrong function code
+				}
+			}
+		} else {														// If counter is not 8 and head is not wrapped around, clear the buffer as a non-8-byte message has been received
 			modbus_buffer_head = 0;										// and wait for another modbus message
 			modbus_buffer_count = 0;
 		}
@@ -341,6 +378,36 @@ void USART1_putstring(uint8_t *s) {
 
 	for (int i = 0; i < ar_size; i++) {
 		USART1_putchar(s[i]);
+	}
+}
+
+/**
+ * Check if there's commands in the modbus buffer
+ * @return Number of commands awaiting to be read from the buffer
+ */
+uint8_t modbus_command_available(void) {
+	return mc_count;
+}
+
+ModbusCommand get_modbus_command(ModbusCommand *commands_array) {
+	ModbusCommand m_command;
+	m_command.address = 0x00;
+
+	if (mc_count > 0) {
+		m_command.address = commands_array[mc_tail].address;
+		m_command.function_code = commands_array[mc_tail].function_code;
+		m_command.data[0] = commands_array[mc_tail].data[0];
+		m_command.data[1] = commands_array[mc_tail].data[1];
+		m_command.data[2] = commands_array[mc_tail].data[2];
+		m_command.data[3] = commands_array[mc_tail].data[3];
+		m_command.crc[0] = commands_array[mc_tail].crc[0];
+		m_command.crc[1] = commands_array[mc_tail].crc[1];
+
+		mc_tail++;
+		mc_count--;
+		if (mc_tail == COMMAND_BUFFER_SIZE) mc_tail = 0;
+	} else {
+		return m_command;
 	}
 }
 
