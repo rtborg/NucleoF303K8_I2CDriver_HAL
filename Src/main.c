@@ -26,18 +26,28 @@ uint16_t sfm4100_register_value = 0;
 uint32_t sfm4100_serial_number = 0;
 
 // Modbus data buffer. When receiving, the UART1 IRQ is filling in the buffer
-volatile char modbus_buffer[256] = { 0 };		// Modbus data buffer. Commands will be no more than 8 bytes long
-volatile uint8_t m_buffer_index = 0;			// Index of modbus buffer
 volatile uint8_t command_flag = 0;				// Flag raised if a 6-byte command is received by the USART
 
-// UART1 buffers variables
-#define UART1_TX_BUFFER_SIZE 64
 
-uint8_t uart_buffer[64] = {0};
+uint8_t uart_buffer[64] = {0};					// UART1 transmit buffer
+
+/*
+ * UART1 Inettupt based-transmit buffer
+ * */
+#define UART1_TX_BUFFER_SIZE 64
 volatile uint8_t uart1TxHead = 0;
 volatile uint8_t uart1TxTail = 0;
 volatile uint8_t uart1TxBuffer[UART1_TX_BUFFER_SIZE];
 volatile uint8_t uart1TxBufferRemaining;
+
+/*
+ * Modbus buffer - 8 bytes, populated by USART1 IRQ
+ * */
+#define MODBUS_COMMAND_LENGTH	8
+volatile uint8_t modbus_buffer_head = 0;
+volatile uint8_t modbus_buffer_tail = 0;
+volatile uint8_t modbus_rx_buffer[MODBUS_COMMAND_LENGTH];
+volatile uint modbus_buffer_count = 0;
 
 
 
@@ -68,7 +78,7 @@ int main(void) {
 		 * Check if a command has been received
 		 * */
 		if (command_flag) {
-			if (modbus_buffer[0] == 0x01 && modbus_buffer[1] == 0x04) {					// Check if address and function code are correct
+			if (modbus_rx_buffer[0] == 0x01 && modbus_rx_buffer[1] == 0x04) {			// Check if address and function code are correct
 				sfm4100_error = 0;														// Clear error
 				sfm4100_register_value = 0;												// Clear temporary register value
 				sfm4100_error = sfm4100_measure(FLOW, &sfm4100_register_value);			// Trigger flow measurement
@@ -260,27 +270,19 @@ static void MX_GPIO_Init(void) {
 /****************************************************************************************************************/
 void USART1_IRQHandler(void) {
 
-	/*
-	 * Handle receive interrupt. Buffer size is 256 bytes and indexer is an unsigned 8-bit variable
-	 * which will overflow if message received is larger than 256 bytes
-	 * */
-	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_RXNE)) {
-		modbus_buffer[m_buffer_index++] = USART1->RDR;
-		// Test only: set RTOR again after each reception
-		huart1.Instance->RTOR |= 0x50;
+	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_RXNE)) {											// Handle RX interrupt
+		huart1.Instance->RTOR |= 0x50;															// Test only: set RTOR again after each reception
+
+		modbus_rx_buffer[modbus_buffer_head++] = USART1->RDR;									// Place char in modbus command buffer (8 bytes only)
+		if (modbus_buffer_head == MODBUS_COMMAND_LENGTH) modbus_buffer_head = 0;				// Wrap-around buffer head
+		modbus_buffer_count++;																	// Increase modbus buffer count
 	}
 
-	/*
-	 * Clear overrun flag
-	 * */
-	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_ORE)) {
+	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_ORE)) {					// Clear overrun flag
 		__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_ORE);
 	}
 
-	/*
-	 * Handle transmit interrupt
-	 * */
-	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TXE)) {					// Check TXE flag
+	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TXE)) {					// Handle transmit interrupt
 		if(sizeof(uart1TxBuffer) > uart1TxBufferRemaining) {			// If the number of free spaces in the buffer is less than the size of the buffer that means there's still characters to be sent
 			USART1->TDR = uart1TxBuffer[uart1TxTail++];					// Place char in the TX buffer. This also clears the interrupt flag
 			if(sizeof(uart1TxBuffer) <= uart1TxTail)					// Wrap around tail if needed
@@ -294,17 +296,17 @@ void USART1_IRQHandler(void) {
 		}
 	}
 
-	/* The Receive Timeout interrupt happens when an idle tie of more than 40 bits (3.5 modbus 11 bit chars)
-	 * is detected. */
-	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_RTOF)) {
-		__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_RTOF);					// Clear receive timeout interrupt flag
-		if (m_buffer_index == 6) {										// If 6 bytes are received, treat message as potential command
-			command_flag = 1;											// Raise flag for command received
-			m_buffer_index = 0;
-		} else {														// If the message is not 6 bytes, discard it
-			m_buffer_index = 0;
-		}
 
+	if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_RTOF)) {					// The Receive Timeout interrupt happens when an idle tie of more than 40 bits (3.5 modbus 11 bit chars)
+		__HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_RTOF);					// Clear receive timeout interrupt flag
+
+		if (modbus_buffer_head == 0 && modbus_buffer_count == 8) {		// Check modbus command buffer. If head == 0 and count == 8, an 8-byte command has been received and head has wrapped around
+			command_flag = 1;											// Set command flag
+			modbus_buffer_count = 0;									// Zero modbus command buffer count
+		} else {														// If counter is not 8 and head is not wrapped around, clear the buffer
+			modbus_buffer_head = 0;										// and wait for another modbus message
+			modbus_buffer_count = 0;
+		}
 	}
 }
 
