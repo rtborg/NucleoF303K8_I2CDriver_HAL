@@ -20,5 +20,7 @@ void USART1_putchar(uint8_t ch);
 void USART1_putstring(uint8_t *s);
 uint8_t modbus_command_available(void);
 ModbusCommand get_modbus_command(void);
+uint8_t modbus_command_check_crc(ModbusCommand mc);
+void MX_CRC_Init(void);
 
 #endif /* INC_RS485_MODBUS_RTU_H_ */

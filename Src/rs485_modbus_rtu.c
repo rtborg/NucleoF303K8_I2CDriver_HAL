@@ -1,6 +1,7 @@
 #include "rs485_modbus_rtu.h"
 
 static UART_HandleTypeDef huart1;										// USART1 handle
+CRC_HandleTypeDef hcrc;													// CRC handle
 
 /*
  * UART1 Inettupt based-transmit buffer
@@ -33,7 +34,7 @@ static volatile uint8_t mc_count = 0;
 
 /****************************************************************************************************************/
 /**
- * @brief USART1 Initialization Function
+ * @brief USART1 Initialization Function (for USART1 with Modbus and CRC functions)
  * @param None
  * @retval None
  */
@@ -66,12 +67,14 @@ void USART1_RS485_Init(void) {
 	__HAL_UART_ENABLE_IT(&huart1, UART_IT_RTO);						// Enable Receive Timeout interrupt
 	__HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);					// Enable Receive interrupt
 	HAL_NVIC_EnableIRQ(USART1_IRQn);
+
+	MX_CRC_Init();													// Initialize CRC calculation unit
 }
 
 
 /****************************************************************************************************************/
 /**
- * USART1 interrupt service routine
+ * @brief USART1 interrupt service routine
  */
 /****************************************************************************************************************/
 void USART1_IRQHandler(void) {
@@ -136,10 +139,12 @@ void USART1_IRQHandler(void) {
 	}
 }
 
+/****************************************************************************************************************/
 /**
- * USART1 interrupt-driven putchar function
+ * @brief USART1 putchar function
  * @param ch
  */
+ /****************************************************************************************************************/
 void USART1_putchar(uint8_t ch) {
 	while (0 == uart1TxBufferRemaining) continue;						// Wait until there's a free space in the transmit buffer
 
@@ -158,10 +163,12 @@ void USART1_putchar(uint8_t ch) {
 	USART1->CR1 |= USART_CR1_TXEIE;										// Enable TXE interrupt
 }
 
+/****************************************************************************************************************/
 /**
- * USART1 interrupt-driven putstring function
+ * @brief USART1 interrupt-driven putstring function
  * @param s
  */
+/****************************************************************************************************************/
 void USART1_putstring(uint8_t *s) {
 	uint ar_size = strlen(s);
 
@@ -170,14 +177,22 @@ void USART1_putstring(uint8_t *s) {
 	}
 }
 
+/****************************************************************************************************************/
 /**
- * Check if there's commands in the modbus buffer
+ * @brief Check if there's commands in the modbus buffer
  * @return Number of commands awaiting to be read from the buffer
  */
+/****************************************************************************************************************/
 uint8_t modbus_command_available(void) {
 	return mc_count;
 }
 
+/****************************************************************************************************************/
+/**
+ * @brief Retrieve next modbus command from buffer
+ * @return the modbus command. If none is available, a modbus command with address set to 0 is returned
+ */
+/****************************************************************************************************************/
 ModbusCommand get_modbus_command(void) {
 	ModbusCommand m_command;
 	m_command.address = 0x00;
@@ -195,8 +210,65 @@ ModbusCommand get_modbus_command(void) {
 		mc_tail++;
 		mc_count--;
 		if (mc_tail == COMMAND_BUFFER_SIZE) mc_tail = 0;
+		return m_command;
 	} else {
 		return m_command;
+	}
+}
+
+/****************************************************************************************************************/
+/**
+ * @brief Check CRC of a ModbusCommand
+ * @param mc
+ * @return 0 on success
+ */
+/****************************************************************************************************************/
+uint8_t modbus_command_check_crc(ModbusCommand mc) {
+	// Copy CRC into a 32-bit int
+	uint32_t message_crc =  ((uint32_t) mc.crc[1] << 8UL) | (mc.crc[0]);
+
+	// Copy address field, function code and data field into an array
+	uint8_t temp[6];
+	temp[0] = mc.address;
+	temp[1] = mc.function_code;
+	temp[2] = mc.data[0];
+	temp[3] = mc.data[1];
+	temp[4] = mc.data[2];
+	temp[5] = mc.data[3];
+
+	uint32_t calculated_crc = HAL_CRC_Calculate(&hcrc, (uint32_t *)&temp, 6);
+
+	if (calculated_crc == message_crc) {
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
+/****************************************************************************************************************/
+/**
+ * @brief CRC Initialization Function
+ * @param None
+ * @retval None
+ */
+/****************************************************************************************************************/
+void MX_CRC_Init(void)
+{
+	hcrc.Instance = CRC;
+	hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_DISABLE;			// Disable default polynomial
+	hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_DISABLE;				// Disable initial value
+	hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_BYTE;		// Required?
+	hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_ENABLE;	// Required?
+	hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;						// Input data format?
+	hcrc.Init.GeneratingPolynomial = 0x8005UL;								// Modbus 16-bit polynomial
+	hcrc.Init.CRCLength = CRC_POLYLENGTH_16B;								// 16-bit CRC
+	hcrc.Init.InitValue = 0xffff;											// Initial CRC register value
+
+	__HAL_RCC_CRC_CLK_ENABLE();												// Enable clock?
+
+	if (HAL_CRC_Init(&hcrc) != HAL_OK)
+	{
+		Error_Handler();
 	}
 }
 
