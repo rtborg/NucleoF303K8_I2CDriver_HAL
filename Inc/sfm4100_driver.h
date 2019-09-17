@@ -29,6 +29,7 @@ typedef enum {
 #define EE_ADR_FLOW_UNIT 0x02B7
 
 // SFM4100 API
+void sfm4100_init(void);
 uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address);
 uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_register_value);
 uint8_t sfm4100_write_register(uint8_t reg, uint16_t *p_register_value);
@@ -37,5 +38,6 @@ uint8_t sfm4100_soft_reset();
 uint8_t sfm4100_read_eeprom(uint16_t eeprom_start_address, uint8_t size, uint8_t eeprom_data[]);
 uint8_t sfm4100_check_crc(uint8_t data[], uint8_t nbrOfBytes, uint8_t checksum);
 uint8_t sfm4100_measure(SFM4100_Measurement_Type measurement_type, uint16_t *p_address);
+
 
 #endif /* INC_SFM4100_DRIVER_H_ */

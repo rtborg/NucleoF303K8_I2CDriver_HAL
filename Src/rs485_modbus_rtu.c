@@ -1,33 +1,33 @@
 #include "rs485_modbus_rtu.h"
 
-UART_HandleTypeDef huart1;
+static UART_HandleTypeDef huart1;										// USART1 handle
 
 /*
- * UART1 Inettupt based-transmit buffer. Not to be used in main
+ * UART1 Inettupt based-transmit buffer
  * */
 #define UART1_TX_BUFFER_SIZE 64
-volatile uint8_t uart1TxHead = 0;
-volatile uint8_t uart1TxTail = 0;
-volatile uint8_t uart1TxBuffer[UART1_TX_BUFFER_SIZE];
-volatile uint8_t uart1TxBufferRemaining;
+static volatile uint8_t uart1TxHead = 0;
+static volatile uint8_t uart1TxTail = 0;
+static volatile uint8_t uart1TxBuffer[UART1_TX_BUFFER_SIZE];
+static volatile uint8_t uart1TxBufferRemaining;
 
 /*
  * Modbus buffer - 8 bytes, populated by USART1 IRQ. Not to be used by main
  * */
 #define MODBUS_COMMAND_LENGTH	8
-volatile uint8_t modbus_buffer_head = 0;
-volatile uint8_t modbus_buffer_tail = 0;
-volatile uint8_t modbus_rx_buffer[MODBUS_COMMAND_LENGTH];
-volatile uint modbus_buffer_count = 0;
+static volatile uint8_t modbus_buffer_head = 0;
+static volatile uint8_t modbus_buffer_tail = 0;
+static volatile uint8_t modbus_rx_buffer[MODBUS_COMMAND_LENGTH];
+static volatile uint modbus_buffer_count = 0;
 
-uint8_t modbus_device_address = 0x01;								// Device address
-const uint8_t modbus_function_code = 0x04;							// Function code
+uint8_t modbus_device_address = 0x01;										// Device address
+static const uint8_t modbus_function_code = 0x04;							// Function code
 
-#define COMMAND_BUFFER_SIZE	8										// Maximum modbus buffer size
-volatile ModbusCommand commands[COMMAND_BUFFER_SIZE];				// Declaration of modbus command buffer
-volatile uint8_t mc_head = 0;
-volatile uint8_t mc_tail = 0;
-volatile uint8_t mc_count = 0;
+#define COMMAND_BUFFER_SIZE	8												// Maximum modbus buffer size
+static volatile ModbusCommand commands[COMMAND_BUFFER_SIZE];				// Declaration of modbus command buffer
+static volatile uint8_t mc_head = 0;
+static volatile uint8_t mc_tail = 0;
+static volatile uint8_t mc_count = 0;
 
 
 
@@ -38,7 +38,7 @@ volatile uint8_t mc_count = 0;
  * @retval None
  */
 /****************************************************************************************************************/
-void MX_USART1_UART_Init(void) {
+void USART1_RS485_Init(void) {
 	huart1.Instance = USART1;
 	huart1.Init.BaudRate = 9600;
 	huart1.Init.WordLength = UART_WORDLENGTH_8B;
