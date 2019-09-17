@@ -167,12 +167,12 @@ void USART1_putchar(uint8_t ch) {
 /**
  * @brief USART1 interrupt-driven putstring function
  * @param s
+ * @param size
  */
 /****************************************************************************************************************/
-void USART1_putstring(uint8_t *s) {
-	uint ar_size = strlen(s);
+void USART1_putstring(uint8_t *s, uint8_t size) {
 
-	for (int i = 0; i < ar_size; i++) {
+	for (int i = 0; i < size; i++) {
 		USART1_putchar(s[i]);
 	}
 }
@@ -243,6 +243,20 @@ uint8_t modbus_command_check_crc(ModbusCommand mc) {
 	} else {
 		return 1;
 	}
+}
+
+/****************************************************************************************************************/
+/**
+ * @brief Generate a CRC for the given message
+ * @param message
+ * @param message_len
+ * @return 16-bit CRC
+ */
+/****************************************************************************************************************/
+uint16_t modbus_generate_crc(uint8_t *message, uint8_t message_len) {
+	uint32_t temp = HAL_CRC_Calculate(&hcrc, (uint32_t*)message, message_len);
+
+	return (uint16_t) temp;
 }
 
 /****************************************************************************************************************/

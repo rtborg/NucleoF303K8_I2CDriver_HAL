@@ -17,10 +17,11 @@ typedef struct ModbusCommand {
 void USART1_RS485_Init(void);
 void USART1_IRQHandler(void);
 void USART1_putchar(uint8_t ch);
-void USART1_putstring(uint8_t *s);
+void USART1_putstring(uint8_t *s, uint8_t size);
 uint8_t modbus_command_available(void);
 ModbusCommand get_modbus_command(void);
 uint8_t modbus_command_check_crc(ModbusCommand mc);
+uint16_t modbus_generate_crc(uint8_t *message, uint8_t message_len);
 void MX_CRC_Init(void);
 
 #endif /* INC_RS485_MODBUS_RTU_H_ */
