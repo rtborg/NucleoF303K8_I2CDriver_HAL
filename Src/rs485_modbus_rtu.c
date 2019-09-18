@@ -21,7 +21,7 @@ static volatile uint8_t modbus_buffer_tail = 0;
 static volatile uint8_t modbus_rx_buffer[MODBUS_COMMAND_LENGTH];
 static volatile uint modbus_buffer_count = 0;
 
-uint8_t modbus_device_address = 0x01;										// Device address
+static uint32_t modbus_device_address = 0x01;								// Device address; updated once in USART1_RS485_Init()
 static const uint8_t modbus_function_code = 0x04;							// Function code
 
 #define COMMAND_BUFFER_SIZE	8												// Maximum modbus buffer size
@@ -35,11 +35,13 @@ static volatile uint8_t mc_count = 0;
 /****************************************************************************************************************/
 /**
  * @brief USART1 Initialization Function (for USART1 with Modbus and CRC functions)
- * @param None
+ * @param device_address
  * @retval None
  */
 /****************************************************************************************************************/
-void USART1_RS485_Init(void) {
+void USART1_RS485_Init(uint32_t device_address) {
+	modbus_device_address = device_address;
+
 	huart1.Instance = USART1;
 	huart1.Init.BaudRate = 9600;
 	huart1.Init.WordLength = UART_WORDLENGTH_8B;

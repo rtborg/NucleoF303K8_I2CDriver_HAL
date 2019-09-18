@@ -14,7 +14,7 @@ typedef struct ModbusCommand {
 }ModbusCommand;
 
 // USART1 Modbus API
-void USART1_RS485_Init(void);
+void USART1_RS485_Init(uint32_t device_address);
 void USART1_IRQHandler(void);
 void USART1_putchar(uint8_t ch);
 void USART1_putstring(uint8_t *s, uint8_t size);

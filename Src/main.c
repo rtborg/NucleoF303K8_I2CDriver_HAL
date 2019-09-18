@@ -32,7 +32,7 @@ int main(void) {
 	MX_GPIO_Init();
 	sfm4100_init();
 	MX_USART2_UART_Init();
-	USART1_RS485_Init();
+	USART1_RS485_Init(0x01);
 
 
 	sfm4100_soft_reset();																// Issue soft reset
@@ -177,7 +177,7 @@ void HAL_IncTick(void)
 	uwTick += uwTickFreq;
 	// User code begin
 	// User code end
-	if (uwTick % 256 == 0) HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+	if (uwTick % 256 == 0) LD3_GPIO_Port->ODR ^= LD3_Pin;
 }
 
 
