@@ -21,7 +21,7 @@ static volatile uint8_t modbus_buffer_tail = 0;
 static volatile uint8_t modbus_rx_buffer[MODBUS_COMMAND_LENGTH];
 static volatile uint modbus_buffer_count = 0;
 
-static uint32_t modbus_device_address = 0x01;								// Device address; updated once in USART1_RS485_Init()
+static uint32_t modbus_device_address = 0x0;								// Device address; updated once in USART1_RS485_Init()
 static const uint8_t modbus_function_code = 0x04;							// Function code
 
 #define COMMAND_BUFFER_SIZE	8												// Maximum modbus buffer size

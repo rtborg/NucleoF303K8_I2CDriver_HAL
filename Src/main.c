@@ -11,6 +11,9 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 
+// Function to get modbus device address from reading 5-bit dip switch
+uint32_t get_modbus_address();
+
 /**
  * The function is defined as weak in stm32f3xx_hal.c and is redefined in main
  * in order to use the sys tick interrupt (ocurring each ms)
@@ -30,17 +33,19 @@ int main(void) {
 	HAL_Init();
 	SystemClock_Config();
 	MX_GPIO_Init();
-	sfm4100_init();
 	MX_USART2_UART_Init();
-	USART1_RS485_Init(0x01);
+
+	uint32_t device_modbus_address = get_modbus_address();
+	sfm4100_init();
+	USART1_RS485_Init(device_modbus_address);
 
 	// @TODO Get device address from dip switch
+
 
 	sfm4100_soft_reset();																// Issue soft reset
 	//sfm4100_error = sfm4100_read_serial_number(&sfm4100_serial_number);					// Get device serial number
 	//sprintf(uart_buffer, "Sensor serial no: %d\n\r", sfm4100_serial_number);			// Print serial number to the console
 	//USART1_putstring(uart_buffer);														// Print serial no.
-
 
 	while (1) {
 
@@ -173,7 +178,36 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+}
 
+/****************************************************************************************************************/
+/**
+ * @brief Get device modbus address from reading 5-bit dip switch connected to PA0, PA1, PA3, PA4, PA5
+ * @note The function is called immediately after boot ONCE. If change in address is needed, set up the address
+ * and reset the circuit
+ * @return Modbus address
+ */
+/****************************************************************************************************************/
+uint32_t get_modbus_address() {
+	/**
+	 * Pin mapping
+	 * DIP SWITCH BIT			MCU PIN
+	 * 0						PA0
+	 * 1						PA1
+	 * 2						PA3
+	 * 3						PA4
+	 * 4						PA5
+	 */
+
+
+	uint32_t porta_idr = GPIOA->IDR;					// Copy input data register
+	porta_idr &= 0x0000003BUL;							// Mask all other bits
+	uint32_t mask = porta_idr >> 1;
+	mask &= 0x1c;
+	porta_idr &= 0x00000002;
+	porta_idr |= mask;
+
+	return porta_idr;
 }
 
 /****************************************************************************************************************/
