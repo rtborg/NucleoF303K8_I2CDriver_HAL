@@ -11,6 +11,12 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 
+/**
+ * The function is defined as weak in stm32f3xx_hal.c and is redefined in main
+ * in order to use the sys tick interrupt (ocurring each ms)
+ */
+void HAL_IncTick(void);
+
 // User variables
 uint8_t sfm4100_error = 0;
 uint16_t sfm4100_register_value = 0;
@@ -36,9 +42,6 @@ int main(void) {
 
 
 	while (1) {
-
-		HAL_Delay(100);
-		HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 
 		// Check if a command has been received
 		if (modbus_command_available()) {
@@ -162,6 +165,19 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
 	HAL_GPIO_Init(LD3_GPIO_Port, &GPIO_InitStruct);
 
+}
+
+/****************************************************************************************************************/
+/**
+ * The function is called each time a sys tick interrupt occurs. See void SysTick_Handler(void) in stm32f3xx_it.c
+ */
+/****************************************************************************************************************/
+void HAL_IncTick(void)
+{
+	uwTick += uwTickFreq;
+	// User code begin
+	// User code end
+	if (uwTick % 256 == 0) HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 }
 
 
