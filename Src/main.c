@@ -11,14 +11,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 
-// SFM4100 variables
+// User variables
 uint8_t sfm4100_error = 0;
 uint16_t sfm4100_register_value = 0;
 uint32_t sfm4100_serial_number = 0;
-
-
-volatile uint8_t command_flag = 0;				// Flag raised if a 6-byte command is received by the USART
-uint8_t uart_buffer[64] = {0};					// UART1 transmit buffer
+uint8_t uart_buffer[64] = {0};
 
 
 int main(void) {
@@ -169,26 +166,6 @@ static void MX_GPIO_Init(void) {
 
 
 /**
- * @brief  Period elapsed callback in non blocking mode
- * @note   This function is called  when TIM2 interrupt took place, inside
- * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
- * a global variable "uwTick" used as application time base.
- * @param  htim : TIM handle
- * @retval None
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	/* USER CODE BEGIN Callback 0 */
-
-	/* USER CODE END Callback 0 */
-	if (htim->Instance == TIM2) {
-		HAL_IncTick();
-	}
-	/* USER CODE BEGIN Callback 1 */
-
-	/* USER CODE END Callback 1 */
-}
-
-/**
  * @brief  This function is executed in case of error occurrence.
  * @retval None
  */
@@ -202,5 +179,3 @@ void Error_Handler(void) {
 	}
 	/* USER CODE END Error_Handler_Debug */
 }
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

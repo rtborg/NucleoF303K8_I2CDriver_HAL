@@ -123,7 +123,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="Src/freertos.c|Middlewares|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="Src/stm32f3xx_hal_timebase_tim.c|Drivers/STM32F3xx_HAL_Driver/Src/stm32f3xx_halOLD.c|Src/stm32f3xx_it_OLD.c|Src/freertos.c|Middlewares|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -262,7 +262,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="Src/freertos.c|Middlewares|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="Src/stm32f3xx_hal_timebase_tim.c|Drivers/STM32F3xx_HAL_Driver/Src/stm32f3xx_halOLD.c|Src/stm32f3xx_it_OLD.c|Src/freertos.c|Middlewares|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS|Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
