@@ -60,8 +60,18 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define MCO_Pin GPIO_PIN_0
 #define MCO_GPIO_Port GPIOF
+#define DIP_Bit_0_Pin GPIO_PIN_0
+#define DIP_Bit_0_GPIO_Port GPIOA
+#define DIP_Bit_1_Pin GPIO_PIN_1
+#define DIP_Bit_1_GPIO_Port GPIOA
 #define VCP_TX_Pin GPIO_PIN_2
 #define VCP_TX_GPIO_Port GPIOA
+#define DIP_Bit_2_Pin GPIO_PIN_3
+#define DIP_Bit_2_GPIO_Port GPIOA
+#define DIP_Bit_3_Pin GPIO_PIN_4
+#define DIP_Bit_3_GPIO_Port GPIOA
+#define DIP_Bit_4_Pin GPIO_PIN_5
+#define DIP_Bit_4_GPIO_Port GPIOA
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
@@ -70,8 +80,8 @@ void Error_Handler(void);
 #define VCP_RX_GPIO_Port GPIOA
 #define LD3_Pin GPIO_PIN_3
 #define LD3_GPIO_Port GPIOB
-#define Debug_Pin GPIO_PIN_4
-#define Debug_Pin_Port GPIOB
+#define Debug_Pin_Pin GPIO_PIN_4
+#define Debug_Pin_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
