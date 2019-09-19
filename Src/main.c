@@ -121,7 +121,6 @@ static void MX_USART2_UART_Init(void) {
 	if (HAL_UART_Init(&huart2) != HAL_OK) {
 		Error_Handler();
 	}
-
 }
 
 
@@ -180,12 +179,11 @@ uint32_t get_modbus_address() {
 	 * 4						PA5
 	 */
 
-
 	uint32_t porta_idr = GPIOA->IDR;					// Copy input data register
 	porta_idr &= 0x0000003BUL;							// Mask all other bits
 	uint32_t mask = porta_idr >> 1;
 	mask &= 0x1c;
-	porta_idr &= 0x00000002;
+	porta_idr &= 0x00000003;
 	porta_idr |= mask;
 
 	return porta_idr;
@@ -195,10 +193,10 @@ uint32_t get_modbus_address() {
 /**
  * @brief Process modbus command
  * @note Description of commands under function code 0x04
- * Register 0x01 - flow measurement
+ * Register 0x01 - flow measurement; 1 register
  * Register 0x02 - serial number; 2 registers
- * Register 0x03 - soft reset
- * @param mc
+ * Register 0x03 - soft reset; response OK in ASCII
+ * @param mc The command for processing
  */
 /****************************************************************************************************************/
 void process_modbus_command(ModbusCommand mc) {
@@ -206,21 +204,22 @@ void process_modbus_command(ModbusCommand mc) {
 	// Get modbus start register and number of registers from data field
 	uint32_t data_field = (uint32_t)(mc.data[0] << 24UL) | (uint32_t)(mc.data[1] << 16UL) | (uint32_t)(mc.data[2] << 8UL) | (uint32_t)(mc.data[3]);
 	uint8_t sfm_err = 0;
+	uint8_t response[9] = {};											// Response array
+	response[0] = mc.address;											// Copy device address
+	response[1] = mc.function_code;										// Copy function code
 
 	// Address 0x01; 1 register
 	if (data_field == 0x00010001) {
 		uint16_t temp = 0xffff;
-		uint8_t rs485_flow_response[7] = {0};							// Construct message
-		rs485_flow_response[0] = mc.address;
-		rs485_flow_response[1] = mc.function_code;
-		rs485_flow_response[2] = 2;										// 2 bytes in payload
+
+		response[2] = 2;												// 2 bytes (1 register) in payload
 		sfm_err = sfm4100_measure(FLOW, &temp);							// Get measurement
-		rs485_flow_response[3] = (uint8_t) (temp >> 8);
-		rs485_flow_response[4] = (uint8_t) (temp & 0xff);
-		uint16_t crc = modbus_generate_crc(rs485_flow_response, 5);		// Generate CRC
-		rs485_flow_response[5] = (uint8_t) (crc & 0xff);
-		rs485_flow_response[6] = (uint8_t) (crc >> 8);
-		USART1_putstring(rs485_flow_response, 7);						// Send measurement to USART1 (rs485)
+		response[3] = (uint8_t) (temp >> 8);							// Copy measurement in buffer
+		response[4] = (uint8_t) (temp & 0xff);
+		uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
+		response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
+		response[6] = (uint8_t) (crc >> 8);
+		USART1_putstring(response, 7);									// Send measurement to USART1 (rs485)
 
 		if (sfm_err) sfm4100_soft_reset();								// If an error is returned when reading sensor, issue soft reset
 	}
@@ -228,26 +227,31 @@ void process_modbus_command(ModbusCommand mc) {
 	// Address 0x02; 2 registers
 	if (data_field == 0x00020002) {
 		uint32_t sfm4100_serial_number = 0;
-		sfm_err = sfm4100_read_serial_number(&sfm4100_serial_number);		// Read sensor serial number
-		uint8_t rs485_flow_response[9] = {0};								// Construct message
-		rs485_flow_response[0] = mc.address;
-		rs485_flow_response[1] = mc.function_code;
-		rs485_flow_response[2] = 4;											// 4 bytes in payload
-		rs485_flow_response[3] = (uint8_t) (sfm4100_serial_number >> 24);
-		rs485_flow_response[4] = (uint8_t) (sfm4100_serial_number >> 16);
-		rs485_flow_response[5] = (uint8_t) (sfm4100_serial_number >> 8);
-		rs485_flow_response[6] = (uint8_t) (sfm4100_serial_number);
-		uint16_t crc = modbus_generate_crc(rs485_flow_response, 7);			// Generate CRC
-		rs485_flow_response[7] = (uint8_t) (crc & 0xff);
-		rs485_flow_response[8] = (uint8_t) (crc >> 8);
-		USART1_putstring(rs485_flow_response, 9);							// Send measurement to USART1 (rs485)
+		sfm_err = sfm4100_read_serial_number(&sfm4100_serial_number);	// Read sensor serial number
 
-		if (sfm_err) sfm4100_soft_reset();									// If an error is returned when reading sensor, issue soft reset
+		response[2] = 4;												// 4 bytes in payload
+		response[3] = (uint8_t) (sfm4100_serial_number >> 24);
+		response[4] = (uint8_t) (sfm4100_serial_number >> 16);
+		response[5] = (uint8_t) (sfm4100_serial_number >> 8);
+		response[6] = (uint8_t) (sfm4100_serial_number);
+		uint16_t crc = modbus_generate_crc(response, 7);				// Generate CRC
+		response[7] = (uint8_t) (crc & 0xff);
+		response[8] = (uint8_t) (crc >> 8);
+		USART1_putstring(response, 9);									// Send serial no. to USART1 (rs485)
+
+		if (sfm_err) sfm4100_soft_reset();								// If an error is returned when reading sensor, issue soft reset
 	}
 
 	// Address 0x03; 1 register
-	if (data_field = 0x00030001) {
-		sfm4100_soft_reset();
+	if (data_field == 0x00030001) {
+		sfm4100_soft_reset();											// Issue soft reset
+		response[2] = 2;												// 2 bytes (1 register) in payload
+		response[3] = 0x4f;												// ASCII 'O'
+		response[4] = 0x4b;												// ASCII 'K'
+		uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
+		response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
+		response[6] = (uint8_t) (crc >> 8);
+		USART1_putstring(response, 7);									// Send response to USART1 (rs485)
 	}
 }
 
