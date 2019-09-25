@@ -21,6 +21,11 @@ void process_modbus_command(ModbusCommand mc);
  */
 void HAL_IncTick(void);
 
+// Macros for controlling power to SFM4100
+// Note that pins start at undefined state?
+#define SFM4100_ON()	SFM4100_Trans_Pin_Port->ODR |= SFM4100_Transistor_Pin;
+#define SFM4100_OFF()	SFM4100_Trans_Pin_Port->ODR &= ~SFM4100_Transistor_Pin;
+
 // User variables
 uint8_t sfm4100_error = 0;
 uint16_t sfm4100_register_value = 0;
@@ -143,7 +148,7 @@ static void MX_GPIO_Init(void)
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 
 	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOB, LD3_Pin|Debug_Pin_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOB, LD3_Pin|SFM4100_Transistor_Pin, GPIO_PIN_RESET);
 
 	/*Configure GPIO pins : DIP_Bit_0_Pin DIP_Bit_1_Pin DIP_Bit_2_Pin DIP_Bit_3_Pin
                            DIP_Bit_4_Pin */
@@ -154,7 +159,7 @@ static void MX_GPIO_Init(void)
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 	/*Configure GPIO pins : LD3_Pin Debug_Pin_Pin */
-	GPIO_InitStruct.Pin = LD3_Pin|Debug_Pin_Pin;
+	GPIO_InitStruct.Pin = LD3_Pin|SFM4100_Transistor_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -280,7 +285,9 @@ void HAL_IncTick(void)
 	uwTick += uwTickFreq;
 	// User code begin
 	// User code end
-	if (uwTick % 256 == 0) LD3_GPIO_Port->ODR ^= LD3_Pin;
+	if (uwTick % 256 == 0) {
+		LD3_GPIO_Port->ODR ^= LD3_Pin;
+	}
 }
 
 
