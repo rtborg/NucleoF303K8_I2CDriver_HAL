@@ -25,6 +25,7 @@ void HAL_IncTick(void);
 uint8_t sfm4100_error = 0;
 uint16_t sfm4100_register_value = 0;
 uint8_t uart_buffer[64] = {0};
+uint32_t device_modbus_address = 0;
 
 
 int main(void) {
@@ -36,7 +37,7 @@ int main(void) {
 	MX_USART2_UART_Init();
 
 	// Initialize sfm4100 (I2C) and rs485 (USART1) interfaces
-	uint32_t device_modbus_address = get_modbus_address();
+	device_modbus_address = get_modbus_address();
 	sfm4100_init();
 	USART1_RS485_Init(device_modbus_address);
 	sfm4100_soft_reset();
@@ -134,30 +135,30 @@ static void MX_USART2_UART_Init(void) {
 /****************************************************************************************************************/
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOF_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
+	/* GPIO Ports Clock Enable */
+	__HAL_RCC_GPIOF_CLK_ENABLE();
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+	__HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LD3_Pin|Debug_Pin_Pin, GPIO_PIN_RESET);
+	/*Configure GPIO pin Output Level */
+	HAL_GPIO_WritePin(GPIOB, LD3_Pin|Debug_Pin_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : DIP_Bit_0_Pin DIP_Bit_1_Pin DIP_Bit_2_Pin DIP_Bit_3_Pin
+	/*Configure GPIO pins : DIP_Bit_0_Pin DIP_Bit_1_Pin DIP_Bit_2_Pin DIP_Bit_3_Pin
                            DIP_Bit_4_Pin */
-  GPIO_InitStruct.Pin = DIP_Bit_0_Pin|DIP_Bit_1_Pin|DIP_Bit_2_Pin|DIP_Bit_3_Pin
-                          |DIP_Bit_4_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	GPIO_InitStruct.Pin = DIP_Bit_0_Pin|DIP_Bit_1_Pin|DIP_Bit_2_Pin|DIP_Bit_3_Pin
+			|DIP_Bit_4_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LD3_Pin Debug_Pin_Pin */
-  GPIO_InitStruct.Pin = LD3_Pin|Debug_Pin_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+	/*Configure GPIO pins : LD3_Pin Debug_Pin_Pin */
+	GPIO_InitStruct.Pin = LD3_Pin|Debug_Pin_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 }
 
 /****************************************************************************************************************/
@@ -204,55 +205,69 @@ void process_modbus_command(ModbusCommand mc) {
 	// Get modbus start register and number of registers from data field
 	uint32_t data_field = (uint32_t)(mc.data[0] << 24UL) | (uint32_t)(mc.data[1] << 16UL) | (uint32_t)(mc.data[2] << 8UL) | (uint32_t)(mc.data[3]);
 	uint8_t sfm_err = 0;
-	uint8_t response[9] = {};											// Response array
-	response[0] = mc.address;											// Copy device address
-	response[1] = mc.function_code;										// Copy function code
+	uint8_t response[9] = {};												// Response array
+	response[0] = mc.address;												// Copy device address
+	response[1] = mc.function_code;											// Copy function code
 
-	// Address 0x01; 1 register
-	if (data_field == 0x00010001) {
-		uint16_t temp = 0xffff;
+	if (mc.function_code == 0x04) {											// Function code 0x04 - Read Holding registers
+		// Address 0x01; 1 register
+		if (data_field == 0x00010001) {
+			uint16_t temp = 0xffff;
 
-		response[2] = 2;												// 2 bytes (1 register) in payload
-		sfm_err = sfm4100_measure(FLOW, &temp);							// Get measurement
-		response[3] = (uint8_t) (temp >> 8);							// Copy measurement in buffer
-		response[4] = (uint8_t) (temp & 0xff);
-		uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
-		response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
-		response[6] = (uint8_t) (crc >> 8);
-		USART1_putstring(response, 7);									// Send measurement to USART1 (rs485)
+			response[2] = 2;												// 2 bytes (1 register) in payload
+			sfm_err = sfm4100_measure(FLOW, &temp);							// Get measurement
+			response[3] = (uint8_t) (temp >> 8);							// Copy measurement in buffer
+			response[4] = (uint8_t) (temp & 0xff);
+			uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
+			response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
+			response[6] = (uint8_t) (crc >> 8);
+			USART1_putstring(response, 7);									// Send measurement to USART1 (rs485)
 
-		if (sfm_err) sfm4100_soft_reset();								// If an error is returned when reading sensor, issue soft reset
+			if (sfm_err) sfm4100_soft_reset();								// If an error is returned when reading sensor, issue soft reset
+		}
+
+		// SFM4100 Serial number; 0x02; 2 registers
+		if (data_field == 0x00020002) {
+			uint32_t sfm4100_serial_number = 0;
+			sfm_err = sfm4100_read_serial_number(&sfm4100_serial_number);	// Read sensor serial number
+
+			response[2] = 4;												// 4 bytes in payload
+			response[3] = (uint8_t) (sfm4100_serial_number >> 24);
+			response[4] = (uint8_t) (sfm4100_serial_number >> 16);
+			response[5] = (uint8_t) (sfm4100_serial_number >> 8);
+			response[6] = (uint8_t) (sfm4100_serial_number);
+			uint16_t crc = modbus_generate_crc(response, 7);				// Generate CRC
+			response[7] = (uint8_t) (crc & 0xff);
+			response[8] = (uint8_t) (crc >> 8);
+			USART1_putstring(response, 9);									// Send serial no. to USART1 (rs485)
+
+			if (sfm_err) sfm4100_soft_reset();								// If an error is returned when reading sensor, issue soft reset
+		}
+
+		// Address 0x03; 1 register
+		if (data_field == 0x00030001) {
+			sfm4100_soft_reset();											// Issue soft reset
+			response[2] = 2;												// 2 bytes (1 register) in payload
+			response[3] = 0x4f;												// ASCII 'O'
+			response[4] = 0x4b;												// ASCII 'K'
+			uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
+			response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
+			response[6] = (uint8_t) (crc >> 8);
+			USART1_putstring(response, 7);									// Send response to USART1 (rs485)
+		}
+
+		// Address 0x04; 1 register; report slave ID
+		if (data_field == 0x00040001) {
+			response[2] = 2;												// 2 bytes (1 register) in payload
+			response[3] = (uint8_t) (device_modbus_address >> 8);			// Copy measurement in buffer
+			response[4] = (uint8_t) (device_modbus_address & 0xff);
+			uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
+			response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
+			response[6] = (uint8_t) (crc >> 8);
+			USART1_putstring(response, 7);									// Send response to USART1 (rs485)
+		}
 	}
 
-	// Address 0x02; 2 registers
-	if (data_field == 0x00020002) {
-		uint32_t sfm4100_serial_number = 0;
-		sfm_err = sfm4100_read_serial_number(&sfm4100_serial_number);	// Read sensor serial number
-
-		response[2] = 4;												// 4 bytes in payload
-		response[3] = (uint8_t) (sfm4100_serial_number >> 24);
-		response[4] = (uint8_t) (sfm4100_serial_number >> 16);
-		response[5] = (uint8_t) (sfm4100_serial_number >> 8);
-		response[6] = (uint8_t) (sfm4100_serial_number);
-		uint16_t crc = modbus_generate_crc(response, 7);				// Generate CRC
-		response[7] = (uint8_t) (crc & 0xff);
-		response[8] = (uint8_t) (crc >> 8);
-		USART1_putstring(response, 9);									// Send serial no. to USART1 (rs485)
-
-		if (sfm_err) sfm4100_soft_reset();								// If an error is returned when reading sensor, issue soft reset
-	}
-
-	// Address 0x03; 1 register
-	if (data_field == 0x00030001) {
-		sfm4100_soft_reset();											// Issue soft reset
-		response[2] = 2;												// 2 bytes (1 register) in payload
-		response[3] = 0x4f;												// ASCII 'O'
-		response[4] = 0x4b;												// ASCII 'K'
-		uint16_t crc = modbus_generate_crc(response, 5);				// Generate CRC
-		response[5] = (uint8_t) (crc & 0xff);							// Copy CRC in buffer
-		response[6] = (uint8_t) (crc >> 8);
-		USART1_putstring(response, 7);									// Send response to USART1 (rs485)
-	}
 }
 
 /****************************************************************************************************************/
