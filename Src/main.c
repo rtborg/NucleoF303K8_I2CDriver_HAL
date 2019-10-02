@@ -46,10 +46,15 @@ int main(void) {
 
 	// Initialize sfm4100 (I2C) and rs485 (USART1) interfaces
 	device_modbus_address = get_modbus_address();
+
 	sfm4100_init();
+	sfm4100_read_register(0xf1, &sfm4100_register_value);					// Get a dummy read to initialize sensor
 	USART1_RS485_Init(device_modbus_address);
 	sfm4100_soft_reset();
 
+	sfm4100_read_register(0xe3, &sfm4100_register_value);					// Read user register
+	sfm4100_read_register(0xe7, &sfm4100_register_value);					// Read read only reg 1
+	sfm4100_read_register(0xe9, &sfm4100_register_value);					// Read read only reg 2
 
 	while (1) {
 		if (modbus_command_available()) {																// Check if a command has been received

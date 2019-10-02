@@ -97,14 +97,15 @@ uint8_t sfm4100_get_eeprom_base_address(uint16_t *p_address) {
 /****************************************************************************************************************/
 uint8_t sfm4100_read_register(uint8_t reg, uint16_t *p_register_value) {
 	uint8_t error = 0;
-
-	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &reg, 0x01, 1000);				// Issue write command
-	error |= HAL_I2C_Master_Receive(&hi2c1, SENSOR_ADDR, sfm4100_data_buffer, 0x03, 1000);	// Read contents of register
-	error |= sfm4100_check_crc(sfm4100_data_buffer, 2, sfm4100_data_buffer[2]); 					// Check CRC
-
 	uint16_t reg_contents = 0;
-	reg_contents |= (uint16_t) (sfm4100_data_buffer[0] << 8);
-	reg_contents |= (uint16_t) (sfm4100_data_buffer[1]);
+	uint8_t temp_buffer[8] = {0};
+
+	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &reg, 0x01, 1000);						// Issue write command
+	error |= HAL_I2C_Master_Receive(&hi2c1, SENSOR_ADDR, temp_buffer, 0x03, 1000);					// Read contents of register
+	error |= sfm4100_check_crc(temp_buffer, 2, temp_buffer[2]); 							// Check CRC
+
+	reg_contents |= (uint16_t) (temp_buffer[0] << 8);
+	reg_contents |= (uint16_t) (temp_buffer[1]);
 	*p_register_value = reg_contents;
 
 	return error;
@@ -171,12 +172,16 @@ uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number) {
 uint8_t sfm4100_soft_reset() {
 	uint8_t error = 0;
 	uint16_t sfm4100_register_value = 0;
-	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &soft_reset, 0x01, 1000);
-	HAL_Delay(250);
+	uint16_t data = 0;
+
+	error |= HAL_I2C_Master_Transmit(&hi2c1, SENSOR_ADDR, &soft_reset, 0x01, 1000);		// Issue soft reset
+	HAL_Delay(32);																		// Wait - see LQ_AN_LiquidFlowSensors I2C implementation
+	error |= sfm4100_read_register(trigger_flow_measurement, &data);					// Get a dummy read
 
 	error |= sfm4100_read_register(adv_user_reg_r, &sfm4100_register_value); 			// Get Adv User Register
-	error |= sfm4100_register_value |= 0xe00;											// Change flow resolution to 16 bits
+	sfm4100_register_value |= 0xe00;													// Change flow resolution to 16 bits
 	error |= sfm4100_write_register(adv_user_reg_w, &sfm4100_register_value);			// Write new value to Adv User Register
+	error |= sfm4100_read_register(adv_user_reg_r, &sfm4100_register_value); 			// Get Adv User Register to confirm resolution
 
 	return error;
 }
@@ -236,7 +241,7 @@ uint8_t sfm4100_check_crc(uint8_t data[], uint8_t nbrOfBytes, uint8_t checksum) 
  * @return
  */
 /****************************************************************************************************************/
-uint8_t sfm4100_measure(SFM4100_Measurement_Type measurement_type,
+uint16_t sfm4100_measure(SFM4100_Measurement_Type measurement_type,
 		uint16_t *p_address) {
 	uint8_t error = 0;
 	uint16_t data = 0;

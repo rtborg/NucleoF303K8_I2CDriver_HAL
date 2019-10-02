@@ -37,7 +37,7 @@ uint8_t sfm4100_read_serial_number(uint32_t *p_serial_number);
 uint8_t sfm4100_soft_reset();
 uint8_t sfm4100_read_eeprom(uint16_t eeprom_start_address, uint8_t size, uint8_t eeprom_data[]);
 uint8_t sfm4100_check_crc(uint8_t data[], uint8_t nbrOfBytes, uint8_t checksum);
-uint8_t sfm4100_measure(SFM4100_Measurement_Type measurement_type, uint16_t *p_address);
+uint16_t sfm4100_measure(SFM4100_Measurement_Type measurement_type, uint16_t *p_address);
 
 
 #endif /* INC_SFM4100_DRIVER_H_ */
